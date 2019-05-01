@@ -7,6 +7,8 @@
 #include "../include/cthread.h"
 #include "../include/cdata.h"
 
+#define stack_size 16384
+
 PFILA2 running_q = NULL;
 PFILA2 ready_high_q = NULL;
 PFILA2 ready_average_q = NULL;
@@ -17,7 +19,6 @@ ucontext_t scheduler_context;
 
 int initialized = 0;
 int t_id = 0;
-int stack_size = 16384;
 
 void initialize(void);
 void schedule(void);
@@ -73,24 +74,21 @@ int cjoin(int tid)
 	}
 
 	tcb = find_tcb(tid);
-	if(!tcb)
+	if(!tcb || tcb->waiting_tid >= 0)
 	{
 		return -1;
 	}
 
 	FirstFila2(running_q);
-	joining_tcb = GetAtIteratorFila2(running_q);	
-	
-	remove_from_fila(joining_tcb);
-	remove_from_fila(tcb);
+	joining_tcb = GetAtIteratorFila2(running_q);
+	DeleteAtIteratorFila2(running_q);
+
+	tcb->waiting_tid = joining_tcb->tid;
 
 	joining_tcb->state = PROCST_BLOQ;
-	tcb->state = PROCST_EXEC;
-
 	add_to_fila(joining_tcb);
-	add_to_fila(tcb);
 
-	swapcontext(&joining_tcb->context, &tcb->context);
+	swapcontext(&joining_tcb->context, &scheduler_context);
 	
 	return 0;
 }
@@ -114,7 +112,48 @@ int cidentify (char *name, int size) {
 
 void schedule(void)
 {
-	printf("Estou na schedule");
+	FirstFila2(running_q);
+	TCB_t* running_tcb = GetAtIteratorFila2(running_q);
+	if(running_tcb)
+	{	
+		if(running_tcb->waiting_tid >= 0)
+		{
+			TCB_t* blocked_t = find_tcb_in_fila(blocked_q, running_tcb->waiting_tid);
+
+			if(blocked_t)
+			{
+				remove_from_fila(blocked_t);
+				blocked_t->state = PROCST_APTO;
+				add_to_fila(blocked_t);
+			}
+		}
+		
+		DeleteAtIteratorFila2(running_q);
+		free(running_tcb->context.uc_stack.ss_sp);
+		free(running_tcb);
+		running_tcb = NULL;
+	}
+	
+	FirstFila2(ready_high_q);
+	TCB_t* ready_tcb = GetAtIteratorFila2(ready_high_q);
+	if(!ready_tcb)
+	{
+		FirstFila2(ready_average_q);
+		ready_tcb = GetAtIteratorFila2(ready_average_q);
+	}
+	if(!ready_tcb)
+	{
+		FirstFila2(ready_low_q);
+		ready_tcb = GetAtIteratorFila2(ready_low_q);
+	}
+	
+	if(ready_tcb)
+	{
+		remove_from_fila(ready_tcb);
+		ready_tcb->state = PROCST_EXEC;	
+		add_to_fila(ready_tcb);	
+		setcontext(&ready_tcb->context);
+	}
 }
 
 void initialize(void)
@@ -154,7 +193,7 @@ void initialize(void)
 int fila_empty(PFILA2 fila)
 {	
 	FirstFila2(fila);
-	TCB_t* ptr = (TCB_t*)GetAtIteratorFila2(fila);
+	void* ptr = GetAtIteratorFila2(fila);
 
 	if(ptr == NULL)
 	{
@@ -271,6 +310,7 @@ TCB_t* create_tcb(int id, int state, int prio, ucontext_t context)
 		tcb->state = state;
 		tcb->prio = prio;
 		tcb->context = context;
+		tcb->waiting_tid = -1;
 	}
 	return tcb;
 }
@@ -313,6 +353,11 @@ TCB_t* find_tcb(int id)
 	if(!tcb)
 	{
 		tcb = find_tcb_in_fila(blocked_q, id);
+	}
+	
+	if(!tcb)
+	{
+		tcb = find_tcb_in_fila(running_q, id);
 	}
 	return tcb;
 }
