@@ -20,6 +20,10 @@ ucontext_t scheduler_context;
 int initialized = 0;
 int t_id = 0;
 
+/* Ponteiro para TCB em execução. */
+TCB_t* running_tcb = NULL;
+
+/* Funções Auxiliares */
 void initialize(void);
 void schedule(void);
 void add_to_fila(TCB_t* tcb);
@@ -60,7 +64,35 @@ int csetprio(int tid, int prio) {
 }
 
 int cyield(void) {
-	return -1;
+	int result = 0;
+
+	running_tcb->state = PROCST_APTO;
+
+	switch(running_tcb->prio) {
+		case 0:
+			if (AppendFila2(ready_low_q, running_tcb)) {
+				result = -1;
+			}
+			break;
+		case 1:
+			if (AppendFila2(ready_average_q, running_tcb)) {
+				result = -1;
+			}
+			break;
+		case 2:
+			if (AppendFila2(ready_high_q, running_tcb)) {
+				result = -1;
+			}
+			break;
+		default:
+			break;
+	}
+
+	if (result == 0) {
+		schedule();	
+	}
+
+    return result;
 }
 
 int cjoin(int tid) 
