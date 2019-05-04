@@ -60,7 +60,18 @@ int ccreate (void* (*start)(void*), void *arg, int prio) {
 }
 
 int csetprio(int tid, int prio) {
-	return -1;
+	int result = 0;
+
+	TCB_t* tcb = find_tcb(tid);
+	tcb->prio = prio;
+
+	if(errno != 0)
+	{
+		printf("Error in csetprio: %d", errno);
+		result = -1;
+	}
+
+	return result;
 }
 
 int cyield(void) {
