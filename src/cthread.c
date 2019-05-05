@@ -20,9 +20,6 @@ ucontext_t scheduler_context;
 int initialized = 0;
 int t_id = 0;
 
-/* Ponteiro para TCB em execução. */
-TCB_t* running_tcb = NULL;
-
 /* Funções Auxiliares */
 void initialize(void);
 void schedule(void);
@@ -59,51 +56,26 @@ int ccreate (void* (*start)(void*), void *arg, int prio) {
 	return ret;
 }
 
-int csetprio(int tid, int prio) {
-	int result = 0;
+int csetprio(int tid, int prio) 
+{
+	FirstFila2(running_q);
+	TCB_t* running_tcb = GetAtIteratorFila2(running_q);
+	running_tcb->prio = prio;
 
-	TCB_t* tcb = find_tcb(tid);
-	tcb->prio = prio;
-
-	if(errno != 0)
-	{
-		printf("Error in csetprio: %d", errno);
-		result = -1;
-	}
-
-	return result;
+	return 0;
 }
 
-int cyield(void) {
-	int result = 0;
+int cyield(void) 
+{	
+	FirstFila2(running_q);
+	TCB_t* running_tcb = GetAtIteratorFila2(running_q);
+	DeleteAtIteratorFila2(running_q);
 
 	running_tcb->state = PROCST_APTO;
+	add_to_fila(running_tcb);
 
-	switch(running_tcb->prio) {
-		case 0:
-			if (AppendFila2(ready_low_q, running_tcb)) {
-				result = -1;
-			}
-			break;
-		case 1:
-			if (AppendFila2(ready_average_q, running_tcb)) {
-				result = -1;
-			}
-			break;
-		case 2:
-			if (AppendFila2(ready_high_q, running_tcb)) {
-				result = -1;
-			}
-			break;
-		default:
-			break;
-	}
-
-	if (result == 0) {
-		schedule();	
-	}
-
-    return result;
+	swapcontext(&running_tcb->context, &scheduler_context);
+    return 0;
 }
 
 int cjoin(int tid) 
