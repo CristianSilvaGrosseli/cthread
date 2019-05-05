@@ -114,8 +114,7 @@ int csem_init(csem_t *sem, int count)
 	{
 		initialize();
 	}
-
-	sem = (csem_t*)malloc(sizeof(csem_t));
+	
 	sem->count = count;
 	
 	sem->fila = (PFILA2)malloc(sizeof(FILA2));
@@ -138,8 +137,42 @@ int csem_init(csem_t *sem, int count)
 	return 0;
 }
 
-int cwait(csem_t *sem) {
-	return -1;
+int cwait(csem_t *sem) 
+{
+	if(sem->count > 0)
+	{	
+		sem->count--;
+	}
+	else
+	{
+		sem->count--;
+		FirstFila2(running_q);
+		TCB_t* tcb = GetAtIteratorFila2(running_q);
+		DeleteAtIteratorFila2(running_q);
+
+		tcb->state = PROCST_BLOQ;
+		
+		PFILA2 prio_fila;
+		FirstFila2(sem->fila);
+		switch(tcb->prio)
+		{
+			case 2:
+			prio_fila = GetAtIteratorFila2(sem->fila);
+			AppendFila2(prio_fila, (void*)tcb);
+			break;
+			case 1:
+			prio_fila = GetAtNextIteratorFila2(sem->fila);
+			AppendFila2(prio_fila, (void*)tcb);
+			break;
+			case 0:
+			NextFila2(sem->fila);
+			prio_fila = GetAtNextIteratorFila2(sem->fila);
+			AppendFila2(prio_fila, (void*)tcb);
+			break;
+		}
+		swapcontext(&tcb->context, &scheduler_context);
+	}
+	return 0;
 }
 
 int csignal(csem_t *sem) {
