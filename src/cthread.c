@@ -108,8 +108,34 @@ int cjoin(int tid)
 	return 0;
 }
 
-int csem_init(csem_t *sem, int count) {
-	return -1;
+int csem_init(csem_t *sem, int count) 
+{	
+	if(!initialized)
+	{
+		initialize();
+	}
+
+	sem = (csem_t*)malloc(sizeof(csem_t));
+	sem->count = count;
+	
+	sem->fila = (PFILA2)malloc(sizeof(FILA2));
+	CreateFila2(sem->fila);
+
+	PFILA2 sem_high_q = (PFILA2)malloc(sizeof(FILA2));
+	CreateFila2(sem_high_q);
+
+	PFILA2 sem_average_q = (PFILA2)malloc(sizeof(FILA2));
+	CreateFila2(sem_average_q);
+
+	PFILA2 sem_low_q = (PFILA2)malloc(sizeof(FILA2));
+	CreateFila2(sem_low_q);
+	
+	AppendFila2(sem->fila, (void*)sem_high_q);
+	AppendFila2(sem->fila, (void*)sem_average_q);
+	AppendFila2(sem->fila, (void*)sem_low_q);
+
+	AppendFila2(sem_q, (void*)sem);
+	return 0;
 }
 
 int cwait(csem_t *sem) {
