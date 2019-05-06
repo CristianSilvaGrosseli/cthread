@@ -14,7 +14,6 @@ PFILA2 ready_high_q = NULL;
 PFILA2 ready_average_q = NULL;
 PFILA2 ready_low_q = NULL;
 PFILA2 blocked_q = NULL;
-PFILA2 sem_q = NULL;
 ucontext_t scheduler_context;
 
 int initialized = 0;
@@ -120,20 +119,14 @@ int csem_init(csem_t *sem, int count)
 	sem->fila = (PFILA2)malloc(sizeof(FILA2));
 	CreateFila2(sem->fila);
 
-	PFILA2 sem_high_q = (PFILA2)malloc(sizeof(FILA2));
-	CreateFila2(sem_high_q);
+	int i = 3;
+	while(i--)
+	{
+		PFILA2 sem_prio_q = (PFILA2)malloc(sizeof(FILA2));
+		CreateFila2(sem_prio_q);
+		AppendFila2(sem->fila, (void*)sem_prio_q);
+	}
 
-	PFILA2 sem_average_q = (PFILA2)malloc(sizeof(FILA2));
-	CreateFila2(sem_average_q);
-
-	PFILA2 sem_low_q = (PFILA2)malloc(sizeof(FILA2));
-	CreateFila2(sem_low_q);
-	
-	AppendFila2(sem->fila, (void*)sem_high_q);
-	AppendFila2(sem->fila, (void*)sem_average_q);
-	AppendFila2(sem->fila, (void*)sem_low_q);
-
-	AppendFila2(sem_q, (void*)sem);
 	return 0;
 }
 
@@ -175,8 +168,47 @@ int cwait(csem_t *sem)
 	return 0;
 }
 
-int csignal(csem_t *sem) {
-	return -1;
+int csignal(csem_t *sem) 
+{
+	sem->count++;
+
+	if(sem->count <= 0)
+	{
+		PFILA2 prio_fila;
+		TCB_t* tcb;
+
+		FirstFila2(sem->fila);
+		prio_fila = GetAtIteratorFila2(sem->fila);
+
+		FirstFila2(prio_fila);
+		tcb = GetAtIteratorFila2(prio_fila);
+
+		if(!tcb)
+		{
+			prio_fila = GetAtNextIteratorFila2(sem->fila);
+			FirstFila2(prio_fila);
+			tcb = GetAtIteratorFila2(prio_fila);
+		}
+
+		if(!tcb)
+		{
+			NextFila2(sem->fila);
+			prio_fila = GetAtNextIteratorFila2(sem->fila);
+			FirstFila2(prio_fila);
+			tcb = GetAtIteratorFila2(prio_fila);
+		}
+
+		if(!tcb)
+		{
+			return -1;
+		}
+
+		DeleteAtIteratorFila2(prio_fila);
+		tcb->state = PROCST_APTO;
+		add_to_fila(tcb);
+	}
+	
+	return 0;
 }
 
 int cidentify (char *name, int size) {
@@ -250,9 +282,6 @@ void initialize(void)
 
 	blocked_q = (PFILA2)malloc(sizeof(FILA2));
 	CreateFila2(blocked_q);
-		
-	sem_q = (PFILA2)malloc(sizeof(FILA2));
-	CreateFila2(sem_q);
 
 	create_context(&scheduler_context, schedule, NULL, 0);
 
