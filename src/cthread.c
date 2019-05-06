@@ -334,33 +334,42 @@ void add_to_fila(TCB_t* tcb)
 
 void remove_from_fila(TCB_t* tcb)
 {
-	if(!find_tcb(tcb->tid))
-	{
-		return;
-	}
-
 	switch(tcb->state)
 	{
 		case PROCST_APTO:
 		switch(tcb->prio)
 		{
 			case 2:
-			DeleteAtIteratorFila2(ready_high_q);
+			if(find_tcb_in_fila(ready_high_q, tcb->tid))
+			{
+				DeleteAtIteratorFila2(ready_high_q);
+			}
 			break;
 			case 1:
-			DeleteAtIteratorFila2(ready_average_q);
+			if(find_tcb_in_fila(ready_average_q, tcb->tid))
+			{
+				DeleteAtIteratorFila2(ready_average_q);
+			}
 			break;
 			case 0:
-			default:
-			DeleteAtIteratorFila2(ready_low_q);
+			if(find_tcb_in_fila(ready_low_q, tcb->tid))
+			{
+				DeleteAtIteratorFila2(ready_low_q);
+			}
 			break; 
 		}
 		break;
 		case PROCST_BLOQ:
-		DeleteAtIteratorFila2(blocked_q);
+		if(find_tcb_in_fila(blocked_q, tcb->tid))
+		{
+			DeleteAtIteratorFila2(blocked_q);
+		}
 		break;
 		case PROCST_EXEC:
-		DeleteAtIteratorFila2(running_q);
+		if(find_tcb_in_fila(running_q, tcb->tid))
+		{
+			DeleteAtIteratorFila2(running_q);
+		}
 		break;
 	}
 }
@@ -457,10 +466,6 @@ TCB_t* find_tcb(int id)
 	{
 		tcb = find_tcb_in_fila(blocked_q, id);
 	}
-	
-	if(!tcb)
-	{
-		tcb = find_tcb_in_fila(running_q, id);
-	}
+
 	return tcb;
 }
