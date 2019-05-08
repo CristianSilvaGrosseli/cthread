@@ -119,96 +119,63 @@ int csem_init(csem_t *sem, int count)
 	sem->fila = (PFILA2)malloc(sizeof(FILA2));
 	CreateFila2(sem->fila);
 
-	int i = 3;
-	while(i--)
-	{
-		PFILA2 sem_prio_q = (PFILA2)malloc(sizeof(FILA2));
-		CreateFila2(sem_prio_q);
-		AppendFila2(sem->fila, (void*)sem_prio_q);
-	}
-
 	return 0;
 }
 
 int cwait(csem_t *sem) 
 {
+	if(!initialized)
+	{
+		initialize();
+	}
+
 	if(sem->count > 0)
-	{	
+	{
 		sem->count--;
 	}
 	else
 	{
 		sem->count--;
+
 		FirstFila2(running_q);
 		TCB_t* tcb = GetAtIteratorFila2(running_q);
 		DeleteAtIteratorFila2(running_q);
 
 		tcb->state = PROCST_BLOQ;
-		
-		PFILA2 prio_fila;
-		FirstFila2(sem->fila);
-		switch(tcb->prio)
-		{
-			case 2:
-			prio_fila = GetAtIteratorFila2(sem->fila);
-			AppendFila2(prio_fila, (void*)tcb);
-			break;
-			case 1:
-			prio_fila = GetAtNextIteratorFila2(sem->fila);
-			AppendFila2(prio_fila, (void*)tcb);
-			break;
-			case 0:
-			NextFila2(sem->fila);
-			prio_fila = GetAtNextIteratorFila2(sem->fila);
-			AppendFila2(prio_fila, (void*)tcb);
-			break;
-		}
+		AppendFila2(sem->fila, (void*)tcb);
+
 		swapcontext(&tcb->context, &scheduler_context);
 	}
+	
 	return 0;
 }
 
 int csignal(csem_t *sem) 
 {
+	if(!initialized)
+	{
+		initialize();
+	}
+
+	int ret = 0;
+	if(sem->count < 0)
+	{
+		FirstFila2(sem->fila);
+		TCB_t* tcb = GetAtIteratorFila2(sem->fila);
+		if(tcb)
+		{
+			DeleteAtIteratorFila2(sem->fila);
+			tcb->state = PROCST_APTO;
+			add_to_fila(tcb);
+		}
+		else
+		{
+			ret = -1;
+		}
+	}
 	sem->count++;
 
-	if(sem->count <= 0)
-	{
-		PFILA2 prio_fila;
-		TCB_t* tcb;
-
-		FirstFila2(sem->fila);
-		prio_fila = GetAtIteratorFila2(sem->fila);
-
-		FirstFila2(prio_fila);
-		tcb = GetAtIteratorFila2(prio_fila);
-
-		if(!tcb)
-		{
-			prio_fila = GetAtNextIteratorFila2(sem->fila);
-			FirstFila2(prio_fila);
-			tcb = GetAtIteratorFila2(prio_fila);
-		}
-
-		if(!tcb)
-		{
-			NextFila2(sem->fila);
-			prio_fila = GetAtNextIteratorFila2(sem->fila);
-			FirstFila2(prio_fila);
-			tcb = GetAtIteratorFila2(prio_fila);
-		}
-
-		if(!tcb)
-		{
-			return -1;
-		}
-
-		DeleteAtIteratorFila2(prio_fila);
-		tcb->state = PROCST_APTO;
-		add_to_fila(tcb);
-	}
-	
-	return 0;
+	return ret;
 }
 
 int cidentify (char *name, int size) {
