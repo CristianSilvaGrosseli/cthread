@@ -14,6 +14,7 @@ PFILA2 ready_high_q = NULL;
 PFILA2 ready_average_q = NULL;
 PFILA2 ready_low_q = NULL;
 PFILA2 blocked_q = NULL;
+PFILA2 sem_q = NULL;
 ucontext_t scheduler_context;
 
 int initialized = 0;
@@ -143,7 +144,11 @@ int cwait(csem_t *sem)
 
 		tcb->state = PROCST_BLOQ;
 		AppendFila2(sem->fila, (void*)tcb);
-
+		
+		if(sem->count == -1)
+		{
+			AppendFila2(sem_q, (void*)sem->fila);
+		}
 		swapcontext(&tcb->context, &scheduler_context);
 	}
 	
@@ -174,6 +179,19 @@ int csignal(csem_t *sem)
 		}
 	}
 	sem->count++;
+
+	if(sem->count == 0)
+	{
+		FirstFila2(sem_q);
+		do
+		{
+			if(sem->fila == GetAtIteratorFila2(sem_q))
+			{
+				DeleteAtIteratorFila2(sem_q);
+				break;
+			}
+		} while(NextFila2(sem_q) == 0);
+	}
 
 	return ret;
 }
@@ -249,6 +267,9 @@ void initialize(void)
 
 	blocked_q = (PFILA2)malloc(sizeof(FILA2));
 	CreateFila2(blocked_q);
+
+	sem_q = (PFILA2)malloc(sizeof(FILA2));
+	CreateFila2(sem_q);
 
 	create_context(&scheduler_context, schedule, NULL, 0);
 
@@ -432,6 +453,18 @@ TCB_t* find_tcb(int id)
 	if(!tcb)
 	{
 		tcb = find_tcb_in_fila(blocked_q, id);
+	}
+
+	if(!tcb && !fila_empty(sem_q))
+	{
+		FirstFila2(sem_q);
+		do
+		{
+			PFILA2 sem_fila = GetAtIteratorFila2(sem_q);
+			tcb = find_tcb_in_fila(sem_fila, id);
+			if(tcb) break;
+		}			
+		while(NextFila2(sem_q) == 0);
 	}
 
 	return tcb;
